@@ -1,0 +1,9 @@
+[project]
+name = "turbofan-rul"
+version = "0.1.0"
+description = "Predictive maintenance: RUL prediction for NASA CMAPSS turbofan engines"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
