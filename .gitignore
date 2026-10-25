@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Data and model artefacts (re-created by scripts, never committed)
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+mlruns/
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.keras
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
