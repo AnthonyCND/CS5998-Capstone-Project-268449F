@@ -14,3 +14,8 @@ preprocessing:
   window_size: 30
   drop_sensors:
     FD001: [1, 5, 6, 10, 16, 18, 19]
+    # Same list as FD001 (02_eda_fd002.ipynb); keeping sensor 6 is still to be tested
+    FD002: [1, 5, 6, 10, 16, 18, 19]
+  # Z-score each sensor within its operating condition, using training statistics.
+  # Required for FD002; for FD001 (one condition) it is a plain z-score.
+  normalise_by_condition: true
