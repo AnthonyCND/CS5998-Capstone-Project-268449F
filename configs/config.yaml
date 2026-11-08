@@ -19,3 +19,7 @@ preprocessing:
   # Z-score each sensor within its operating condition, using training statistics.
   # Required for FD002; for FD001 (one condition) it is a plain z-score.
   normalise_by_condition: true
+
+# Train/validation folds by engine (no engine in both); shuffled with the global seed
+validation:
+  n_splits: 5
