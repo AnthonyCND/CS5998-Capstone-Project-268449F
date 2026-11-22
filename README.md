@@ -81,6 +81,17 @@ python -m src.models.cnn_bilstm           # 1D-CNN + BiLSTM (CPU: about 1 hour)
 python -m src.models.cnn_bilstm --subset FD001
 ```
 
+The tree models use each sensor's latest reading plus the window statistics in
+`preprocessing.rolling_stats` (default: mean and std). To compare other
+statistics without changing the config, for example the min and max ablation:
+
+```bash
+python -m src.models.baselines --rolling-stats mean std min max
+```
+
+This writes `results/baselines_<subset>_mean_std_min_max.json` alongside the
+default results.
+
 On Windows without a GPU, install the smaller CPU build of PyTorch first:
 `pip install torch --index-url https://download.pytorch.org/whl/cpu`.
 

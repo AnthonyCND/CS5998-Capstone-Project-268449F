@@ -11,7 +11,7 @@ import pandas as pd
 from src.data.load import SENSORS
 from src.data.quality import fit_medians, impute
 from src.features.conditions import fit_condition_stats
-from src.features.windows import make_sequences, rolling_features
+from src.features.windows import DEFAULT_SUMMARIES, make_sequences, rolling_features
 
 
 def kept_sensors(drop: list[int]) -> list[str]:
@@ -22,8 +22,8 @@ def kept_sensors(drop: list[int]) -> list[str]:
 class FeaturePipeline:
     """Imputation, condition normalisation and windowing fitted on training engines."""
 
-    def __init__(self, sensors: list[str], window: int):
-        self.sensors, self.window = sensors, window
+    def __init__(self, sensors: list[str], window: int, summaries: tuple[str, ...] | list[str] = DEFAULT_SUMMARIES):
+        self.sensors, self.window, self.summaries = sensors, window, tuple(summaries)
 
     def fit(self, train: pd.DataFrame) -> "FeaturePipeline":
         self.medians = fit_medians(train)
@@ -32,7 +32,9 @@ class FeaturePipeline:
 
     def transform(self, df: pd.DataFrame, *, last_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Return rolling-window (features, index); index holds unit, cycle and rul."""
-        features = rolling_features(impute(df, self.medians), self.stats, self.window, last_only=last_only)
+        features = rolling_features(
+            impute(df, self.medians), self.stats, self.window, summaries=self.summaries, last_only=last_only
+        )
         keys = [c for c in ("unit", "cycle", "rul") if c in features]
         return features.drop(columns=keys), features[keys]
 

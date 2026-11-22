@@ -19,6 +19,12 @@ preprocessing:
   # Z-score each sensor within its operating condition, using training statistics.
   # Required for FD002; for FD001 (one condition) it is a plain z-score.
   normalise_by_condition: true
+  # Statistics of each sensor's window used as tree-model features, besides its
+  # latest reading. Options: mean, std, min, max (PDD Section 2.2). Adding min and
+  # max lowered validation scores for both baselines on FD001 and FD002, so the
+  # default leaves them out; run the ablation with
+  #   python -m src.models.baselines --rolling-stats mean std min max
+  rolling_stats: [mean, std]
 
 # Train/validation folds by engine (no engine in both); shuffled with the global seed
 validation:

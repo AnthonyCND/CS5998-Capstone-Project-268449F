@@ -24,6 +24,7 @@ from src.data.splits import iter_folds
 from src.evaluation.metrics import nasa_score, rmse
 from src.features.labels import add_test_rul, add_train_rul
 from src.features.pipeline import FeaturePipeline, kept_sensors
+from src.features.windows import DEFAULT_SUMMARIES
 
 MODELS = {"random_forest": RandomForestRegressor, "xgboost": XGBRegressor}
 
@@ -35,9 +36,9 @@ def build_model(name: str, params: dict, seed: int):
     return MODELS[name](**params, random_state=seed)
 
 
-def fit_predict(name, params, seed, train, other, sensors, window, *, last_only=False):
+def fit_predict(name, params, seed, train, other, sensors, window, *, summaries=DEFAULT_SUMMARIES, last_only=False):
     """Fit the pipeline and model on ``train``; return predictions and index for ``other``."""
-    pipeline = FeaturePipeline(sensors, window).fit(train)
+    pipeline = FeaturePipeline(sensors, window, summaries).fit(train)
     X_train, train_index = pipeline.transform(train)
     model = build_model(name, params, seed).fit(X_train, train_index["rul"])
     X_other, other_index = pipeline.transform(other, last_only=last_only)
@@ -51,21 +52,24 @@ def scores(y_true, y_pred) -> dict:
 def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
     """Cross-validate and test every baseline on one subset."""
     prep, seed = config["preprocessing"], config["seed"]
-    cap, window = prep["rul_cap"], prep["window_size"]
+    cap, window, summaries = prep["rul_cap"], prep["window_size"], list(prep["rolling_stats"])
     sensors = kept_sensors(prep["drop_sensors"][subset])
     train, test, rul = load_subset(subset)
     train = add_train_rul(train, cap=cap)
     test = add_test_rul(test, rul, cap=None)
 
-    results = {"subset": subset, "rul_cap": cap, "window_size": window, "sensors": sensors, "models": {}}
+    results = {"subset": subset, "rul_cap": cap, "window_size": window, "rolling_stats": summaries,
+               "sensors": sensors, "models": {}}
     predictions = []
     for name, params in config["models"].items():
         folds = []
         for fold_train, fold_val in iter_folds(train, config["validation"]["n_splits"], seed):
-            pred, index = fit_predict(name, params, seed, fold_train, fold_val, sensors, window)
+            pred, index = fit_predict(name, params, seed, fold_train, fold_val, sensors, window, summaries=summaries)
             folds.append(scores(index["rul"], pred))
 
-        pred, index = fit_predict(name, params, seed, train, test, sensors, window, last_only=True)
+        pred, index = fit_predict(
+            name, params, seed, train, test, sensors, window, summaries=summaries, last_only=True
+        )
         true = index["rul"].to_numpy()
         results["models"][name] = {
             "params": params,
@@ -96,15 +100,26 @@ def summary_table(results: dict) -> pd.DataFrame:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Train and evaluate the tree-model baselines.")
     parser.add_argument("--subset", nargs="+", help="Subsets to run (default: all in the config)")
+    parser.add_argument(
+        "--rolling-stats",
+        nargs="+",
+        metavar="STAT",
+        help="Window statistics to use instead of the config's (e.g. mean std min max); "
+        "results are saved with the statistics in the file name",
+    )
     args = parser.parse_args(argv)
 
     config = load_config()
+    suffix = ""
+    if args.rolling_stats:
+        config["preprocessing"]["rolling_stats"] = args.rolling_stats
+        suffix = "_" + "_".join(args.rolling_stats)
     out_dir = resolve_path(config["results_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
     for subset in args.subset or config["data"]["subsets"]:
         results, predictions = run_subset(subset, config)
-        Path(out_dir / f"baselines_{subset}.json").write_text(json.dumps(results, indent=2))
-        predictions.to_csv(out_dir / f"baselines_{subset}_test_predictions.csv", index=False)
+        Path(out_dir / f"baselines_{subset}{suffix}.json").write_text(json.dumps(results, indent=2))
+        predictions.to_csv(out_dir / f"baselines_{subset}{suffix}_test_predictions.csv", index=False)
         print(f"\n{subset} (test scores against uncapped RUL unless marked capped)")
         print(summary_table(results).to_string())
 

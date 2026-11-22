@@ -18,6 +18,10 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 from src.features.conditions import ConditionStats, normalise_by_condition
 
+# Window statistics available to rolling_features, in column order
+SUMMARIES = {"mean": np.mean, "std": np.std, "min": np.min, "max": np.max}
+DEFAULT_SUMMARIES = ("mean", "std")
+
 
 def _windows(values: np.ndarray, window: int) -> np.ndarray:
     """Return a (cycles, window, sensors) view of one engine's padded readings."""
@@ -62,21 +66,32 @@ def make_sequences(
 
 
 def rolling_features(
-    df: pd.DataFrame, stats: ConditionStats, window: int, *, last_only: bool = False
+    df: pd.DataFrame,
+    stats: ConditionStats,
+    window: int,
+    *,
+    summaries: tuple[str, ...] | list[str] = DEFAULT_SUMMARIES,
+    last_only: bool = False,
 ) -> pd.DataFrame:
     """Build one row of window statistics per cycle for the tree models.
 
     For each sensor: the latest normalised reading (named after the sensor),
-    and its mean (``_mean``), standard deviation (``_std``), minimum (``_min``)
-    and maximum (``_max``) over the window (PDD Section 2.2). Rows also carry
-    ``unit``, ``cycle`` and ``rul``, if present.
+    followed by each requested statistic over the window, named
+    ``<sensor>_<statistic>``. Available statistics are those in ``SUMMARIES``
+    (mean, std, min, max; PDD Section 2.2); the default is mean and std, since
+    adding min and max lowered validation scores for both baselines. Rows also
+    carry ``unit``, ``cycle`` and ``rul``, if present.
     """
+    unknown = sorted(set(summaries) - set(SUMMARIES))
+    if unknown:
+        raise ValueError(f"Unknown window statistics {unknown}; expected some of {list(SUMMARIES)}")
+    if len(set(summaries)) != len(summaries):
+        raise ValueError(f"Window statistics repeated: {list(summaries)}")
     sensors = stats.mean.columns.tolist()
-    summaries = {"mean": np.mean, "std": np.std, "min": np.min, "max": np.max}
     columns = [*sensors, *(f"{s}_{name}" for name in summaries for s in sensors)]
     frames = []
     for index, windows in _engine_windows(df, stats, window, last_only):
-        values = np.hstack([windows[:, -1, :], *(f(windows, axis=1) for f in summaries.values())])
+        values = np.hstack([windows[:, -1, :], *(SUMMARIES[name](windows, axis=1) for name in summaries)])
         features = pd.DataFrame(values, columns=columns, index=index.index)
         frames.append(pd.concat([index, features], axis=1))
     return pd.concat(frames, ignore_index=True)

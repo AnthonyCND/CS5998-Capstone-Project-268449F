@@ -47,7 +47,13 @@ def test_transform_separates_features_from_index():
     pipeline = FeaturePipeline(SENSORS, window=3).fit(engines([1]))
     features, index = pipeline.transform(engines([1]))
     assert index.columns.tolist() == ["unit", "cycle", "rul"]
-    assert features.shape == (20, 10)
+    assert features.shape == (20, 6)  # latest, mean and std of two sensors
+
+
+def test_pipeline_uses_the_requested_statistics():
+    pipeline = FeaturePipeline(SENSORS, window=3, summaries=["min", "max"]).fit(engines([1]))
+    features, _ = pipeline.transform(engines([1]))
+    assert features.columns.tolist() == [*SENSORS, *(f"{s}_min" for s in SENSORS), *(f"{s}_max" for s in SENSORS)]
 
 
 @pytest.mark.parametrize("name", sorted(SMALL))
