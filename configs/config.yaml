@@ -42,3 +42,19 @@ models:
     subsample: 0.8
     colsample_bytree: 0.8
     n_jobs: -1
+
+# 1D-CNN + stacked BiLSTM (PDD Section 3.2); starting values, not yet tuned
+cnn_bilstm:
+  architecture:
+    conv_channels: [32, 64]
+    kernel_size: 3
+    lstm_hidden: 64
+    lstm_layers: 2
+    dense: 64
+    dropout: 0.2
+  training:
+    batch_size: 256
+    learning_rate: 0.001
+    max_epochs: 60
+    # Stop after this many epochs without a better validation NASA score
+    patience: 10
