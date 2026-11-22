@@ -67,14 +67,16 @@ def rolling_features(
     """Build one row of window statistics per cycle for the tree models.
 
     For each sensor: the latest normalised reading (named after the sensor),
-    and its mean (``_mean``) and standard deviation (``_std``) over the window.
-    Rows also carry ``unit``, ``cycle`` and ``rul``, if present.
+    and its mean (``_mean``), standard deviation (``_std``), minimum (``_min``)
+    and maximum (``_max``) over the window (PDD Section 2.2). Rows also carry
+    ``unit``, ``cycle`` and ``rul``, if present.
     """
     sensors = stats.mean.columns.tolist()
+    summaries = {"mean": np.mean, "std": np.std, "min": np.min, "max": np.max}
+    columns = [*sensors, *(f"{s}_{name}" for name in summaries for s in sensors)]
     frames = []
     for index, windows in _engine_windows(df, stats, window, last_only):
-        values = np.hstack([windows[:, -1, :], windows.mean(axis=1), windows.std(axis=1)])
-        columns = [*sensors, *(f"{s}_mean" for s in sensors), *(f"{s}_std" for s in sensors)]
+        values = np.hstack([windows[:, -1, :], *(f(windows, axis=1) for f in summaries.values())])
         features = pd.DataFrame(values, columns=columns, index=index.index)
         frames.append(pd.concat([index, features], axis=1))
     return pd.concat(frames, ignore_index=True)

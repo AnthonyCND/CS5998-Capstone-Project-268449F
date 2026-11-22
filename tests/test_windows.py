@@ -84,12 +84,24 @@ def test_rolling_features_summarise_each_window(engines, stats, normalised):
     assert features.columns.tolist() == [
         "unit", "cycle",
         "sensor_2", "sensor_3", "sensor_2_mean", "sensor_3_mean", "sensor_2_std", "sensor_3_std",
+        "sensor_2_min", "sensor_3_min", "sensor_2_max", "sensor_3_max",
     ]
     row = features.iloc[1]  # unit 1, cycle 2: window is cycles 1, 1, 2
     window = normalised[[0, 0, 1]]
     np.testing.assert_allclose(row[["sensor_2", "sensor_3"]], window[-1])
     np.testing.assert_allclose(row[["sensor_2_mean", "sensor_3_mean"]], window.mean(axis=0))
     np.testing.assert_allclose(row[["sensor_2_std", "sensor_3_std"]], window.std(axis=0))
+    np.testing.assert_allclose(row[["sensor_2_min", "sensor_3_min"]], window.min(axis=0))
+    np.testing.assert_allclose(row[["sensor_2_max", "sensor_3_max"]], window.max(axis=0))
+
+
+def test_min_and_max_bound_the_window(engines, stats):
+    features = rolling_features(engines, stats, WINDOW)
+    eps = 1e-12  # a constant (padded) window's mean can differ from its min in the last bit
+    for s in ("sensor_2", "sensor_3"):
+        assert (features[f"{s}_min"] <= features[f"{s}_mean"] + eps).all()
+        assert (features[f"{s}_mean"] <= features[f"{s}_max"] + eps).all()
+        assert features[s].between(features[f"{s}_min"], features[f"{s}_max"]).all()
 
 
 def test_rolling_features_last_only(engines, stats):
@@ -132,4 +144,4 @@ def test_real_cmapss_shapes(subset):
     assert (index_test["cycle"].to_numpy() == test.groupby("unit")["cycle"].max().to_numpy()).all()
 
     features = rolling_features(train, stats, window)
-    assert features.shape == (len(train), 2 + 3 * len(sensors))
+    assert features.shape == (len(train), 2 + 5 * len(sensors))

@@ -47,7 +47,7 @@ def test_transform_separates_features_from_index():
     pipeline = FeaturePipeline(SENSORS, window=3).fit(engines([1]))
     features, index = pipeline.transform(engines([1]))
     assert index.columns.tolist() == ["unit", "cycle", "rul"]
-    assert features.shape == (20, 6)
+    assert features.shape == (20, 10)
 
 
 @pytest.mark.parametrize("name", sorted(SMALL))
