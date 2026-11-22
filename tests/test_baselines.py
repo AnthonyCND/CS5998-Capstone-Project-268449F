@@ -4,7 +4,8 @@ import pytest
 
 from src.data.quality import CHANNELS
 from src.features.labels import add_train_rul
-from src.models.baselines import FeaturePipeline, build_model, fit_predict, kept_sensors
+from src.features.pipeline import FeaturePipeline, kept_sensors
+from src.models.baselines import build_model, fit_predict
 
 SENSORS = ["sensor_2", "sensor_3"]
 SMALL = {"random_forest": {"n_estimators": 10}, "xgboost": {"n_estimators": 10}}

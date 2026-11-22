@@ -19,20 +19,13 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
 from src.config import load_config, resolve_path
-from src.data.load import SENSORS, load_subset
-from src.data.quality import fit_medians, impute
+from src.data.load import load_subset
 from src.data.splits import iter_folds
 from src.evaluation.metrics import nasa_score, rmse
-from src.features.conditions import fit_condition_stats
 from src.features.labels import add_test_rul, add_train_rul
-from src.features.windows import rolling_features
+from src.features.pipeline import FeaturePipeline, kept_sensors
 
 MODELS = {"random_forest": RandomForestRegressor, "xgboost": XGBRegressor}
-
-
-def kept_sensors(drop: list[int]) -> list[str]:
-    """Return sensor column names, leaving out the dropped sensor numbers."""
-    return [s for s in SENSORS if int(s.split("_")[1]) not in drop]
 
 
 def build_model(name: str, params: dict, seed: int):
@@ -40,24 +33,6 @@ def build_model(name: str, params: dict, seed: int):
     if name not in MODELS:
         raise ValueError(f"Unknown model {name!r}; expected one of {sorted(MODELS)}")
     return MODELS[name](**params, random_state=seed)
-
-
-class FeaturePipeline:
-    """Imputation, condition normalisation and windowing fitted on training engines."""
-
-    def __init__(self, sensors: list[str], window: int):
-        self.sensors, self.window = sensors, window
-
-    def fit(self, train: pd.DataFrame) -> "FeaturePipeline":
-        self.medians = fit_medians(train)
-        self.stats = fit_condition_stats(impute(train, self.medians), self.sensors)
-        return self
-
-    def transform(self, df: pd.DataFrame, *, last_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Return (features, index) where index holds unit, cycle and rul."""
-        features = rolling_features(impute(df, self.medians), self.stats, self.window, last_only=last_only)
-        keys = [c for c in ("unit", "cycle", "rul") if c in features]
-        return features.drop(columns=keys), features[keys]
 
 
 def fit_predict(name, params, seed, train, other, sensors, window, *, last_only=False):
