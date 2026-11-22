@@ -81,6 +81,9 @@ python -m src.models.cnn_bilstm           # 1D-CNN + BiLSTM (CPU: about 1 hour)
 python -m src.models.cnn_bilstm --subset FD001
 ```
 
+On Windows without a GPU, install the smaller CPU build of PyTorch first:
+`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+
 The tree models use each sensor's latest reading plus the window statistics in
 `preprocessing.rolling_stats` (default: mean and std). To compare other
 statistics without changing the config, for example the min and max ablation:
@@ -92,9 +95,6 @@ python -m src.models.baselines --rolling-stats mean std min max
 This writes `results/baselines_<subset>_mean_std_min_max.json` alongside the
 default results.
 
-On Windows without a GPU, install the smaller CPU build of PyTorch first:
-`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
-
 ### Run tests
 
 ```bash
@@ -105,8 +105,8 @@ pytest
 
 | Milestone | Week | Deliverables | Status |
 |-----------|------|--------------|--------|
-| M1 | 4 | Project definition, repository, data acquisition pipeline | In progress |
-| M2 | 8 | EDA, sliding-window pipeline, XGBoost + 1D-CNN/BiLSTM models, architecture diagram, demo | Planned |
+| M1 | 4 | Project definition, repository, data acquisition pipeline | Complete |
+| M2 | 8 | EDA, sliding-window pipeline, XGBoost + 1D-CNN/BiLSTM models, architecture diagram, demo | In progress (models trained; demo to record) |
 | M3 | 12 | Final report, reproducibility checklist, Dockerised FastAPI service, Streamlit UI | Planned |
 
 ## Data source
