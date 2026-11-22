@@ -24,11 +24,15 @@ See [docs/](docs/) for the Project Definition Document.
 ```
 configs/      Experiment and pipeline configuration (YAML)
 data/         Raw and processed data (git-ignored, created by scripts)
-docs/         Project documents and diagrams
+docs/         Project Definition Document
 models/       Trained model artefacts (git-ignored)
 notebooks/    Exploratory analysis notebooks
+results/      Model metrics (JSON) and test predictions (CSV)
 src/          Source code
-  data/       Data acquisition and loading
+  data/       Data acquisition, loading, quality checks, engine-level splits
+  features/   RUL labels, condition normalisation, windowing, fitted pipeline
+  models/     Random Forest / XGBoost baselines and the CNN-BiLSTM
+  evaluation/ RMSE and NASA score
 tests/        Unit tests
 ```
 
@@ -65,6 +69,20 @@ from src.data.load import load_subset
 
 train, test, rul = load_subset("FD001")
 ```
+
+### Train and evaluate the models
+
+Runs 5-fold validation by engine, then scores each test engine against its
+true RUL and the capped RUL. Results are written to `results/`.
+
+```bash
+python -m src.models.baselines            # Random Forest and XGBoost
+python -m src.models.cnn_bilstm           # 1D-CNN + BiLSTM (CPU: about 1 hour)
+python -m src.models.cnn_bilstm --subset FD001
+```
+
+On Windows without a GPU, install the smaller CPU build of PyTorch first:
+`pip install torch --index-url https://download.pytorch.org/whl/cpu`.
 
 ### Run tests
 
