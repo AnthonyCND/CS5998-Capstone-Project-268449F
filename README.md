@@ -23,15 +23,15 @@ See [docs/](docs/) for the Project Definition Document.
 
 ```
 configs/      Experiment and pipeline configuration (YAML)
-data/         Raw and processed data (git-ignored, created by scripts)
+data/         Downloaded CMAPSS files (git-ignored, created by src/data/download.py)
 docs/         Project Definition Document
-models/       Trained model artefacts (git-ignored)
+models/       Trained model files (git-ignored, created by the training scripts)
 notebooks/    Exploratory analysis notebooks
 results/      Model metrics (JSON) and test predictions (CSV)
-src/          Source code
+src/          Source code only; the data and model files it creates go in data/ and models/
   data/       Data acquisition, loading, quality checks, engine-level splits
   features/   RUL labels, condition normalisation, windowing, fitted pipeline
-  models/     Random Forest / XGBoost baselines and the CNN-BiLSTM
+  models/     Random Forest / XGBoost baselines, the CNN-BiLSTM, saving and loading
   evaluation/ RMSE and NASA score
 tests/        Unit tests
 ```
@@ -73,7 +73,9 @@ train, test, rul = load_subset("FD001")
 ### Train and evaluate the models
 
 Runs 5-fold validation by engine, then scores each test engine against its
-true RUL and the capped RUL. Results are written to `results/`.
+true RUL and the capped RUL. Results are written to `results/`, and each final
+model is saved with its fitted preprocessing to `models/` (for example
+`models/xgboost_FD001.joblib`).
 
 ```bash
 python -m src.models.baselines            # Random Forest and XGBoost
@@ -94,6 +96,19 @@ python -m src.models.baselines --rolling-stats mean std min max
 
 This writes `results/baselines_<subset>_mean_std_min_max.json` alongside the
 default results.
+
+### Use a saved model
+
+```python
+from src.data.load import load_subset
+from src.models.artifacts import load
+
+model = load("models/cnn_bilstm_FD001.joblib")
+_, test, _ = load_subset("FD001")
+model.predict(test)  # unit, cycle and predicted RUL at each engine's last cycle
+```
+
+Saved models are not committed; run the training commands above to create them.
 
 ### Run tests
 

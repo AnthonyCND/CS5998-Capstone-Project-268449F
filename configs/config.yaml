@@ -33,6 +33,8 @@ validation:
 # Test scores are reported against NASA's true (uncapped) RUL as the primary
 # target, and against RUL capped at rul_cap for comparison
 results_dir: results
+# Final trained models with their fitted pipelines (git-ignored; created by training)
+models_dir: models
 
 # Baseline hyperparameters (starting values, not yet tuned)
 models:

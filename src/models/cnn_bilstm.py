@@ -8,8 +8,9 @@ window. The model predicts RUL divided by ``rul_cap``, so its target lies in
 Validation follows the baselines: in each engine-level fold, preprocessing is
 fitted on the fold's training engines, and the epoch with the lowest
 validation NASA score is kept (PDD Section 5). The final model is retrained on
-all training engines for the median of the folds' best epoch counts, then
-scored on each test engine's last window against uncapped and capped RUL.
+all training engines for the median of the folds' best epoch counts, scored
+on each test engine's last window against uncapped and capped RUL, and saved
+with its fitted pipeline to ``models/`` (see src/models/artifacts.py).
 """
 
 import argparse
@@ -27,6 +28,7 @@ from src.data.load import load_subset
 from src.data.splits import iter_folds
 from src.features.labels import add_test_rul, add_train_rul
 from src.features.pipeline import FeaturePipeline, kept_sensors
+from src.models.artifacts import TrainedModel, save
 from src.models.baselines import scores, summary_table
 
 
@@ -44,6 +46,11 @@ class CNNBiLSTM(nn.Module):
         dropout: float = 0.2,
     ):
         super().__init__()
+        # Constructor arguments, so a saved model can be rebuilt (src/models/artifacts.py)
+        self.config = {
+            "n_sensors": n_sensors, "conv_channels": list(conv_channels), "kernel_size": kernel_size,
+            "lstm_hidden": lstm_hidden, "lstm_layers": lstm_layers, "dense": dense, "dropout": dropout,
+        }
         convs, in_channels = [], n_sensors
         for out_channels in conv_channels:
             convs += [nn.Conv1d(in_channels, out_channels, kernel_size, padding="same"), nn.ReLU()]
@@ -136,8 +143,11 @@ def train_model(
     return model, history
 
 
-def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
-    """Cross-validate, retrain on all training engines and test on one subset."""
+def run_subset(subset: str, config: dict, *, models_dir: Path | None = None) -> tuple[dict, pd.DataFrame]:
+    """Cross-validate, retrain on all training engines and test on one subset.
+
+    With ``models_dir``, the final model is saved there as ``cnn_bilstm_<subset>.joblib``.
+    """
     prep, seed = config["preprocessing"], config["seed"]
     cap, window = prep["rul_cap"], prep["window_size"]
     params, training = config["cnn_bilstm"]["architecture"], config["cnn_bilstm"]["training"]
@@ -194,6 +204,10 @@ def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
         },
     }
     predictions = pd.DataFrame({"model": "cnn_bilstm", "unit": idx_test["unit"], "true_rul": true, "predicted_rul": pred})
+    if models_dir is not None:
+        info = {"subset": subset, "sensors": sensors, "window_size": window, "params": params,
+                "final_epochs": epochs, "test_uncapped": results["models"]["cnn_bilstm"]["test_uncapped"]}
+        save(TrainedModel("cnn_bilstm", pipeline, model, cap, info), Path(models_dir) / f"cnn_bilstm_{subset}.joblib")
     return results, predictions
 
 
@@ -205,8 +219,9 @@ def main(argv: list[str] | None = None) -> None:
     config = load_config()
     out_dir = resolve_path(config["results_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = resolve_path(config["models_dir"])
     for subset in args.subset or config["data"]["subsets"]:
-        results, predictions = run_subset(subset, config)
+        results, predictions = run_subset(subset, config, models_dir=models_dir)
         Path(out_dir / f"cnn_bilstm_{subset}.json").write_text(json.dumps(results, indent=2))
         predictions.to_csv(out_dir / f"cnn_bilstm_{subset}_test_predictions.csv", index=False)
         print(f"\n{subset} (test scores against uncapped RUL unless marked capped)")

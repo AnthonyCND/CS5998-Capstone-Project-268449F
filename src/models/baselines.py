@@ -2,7 +2,8 @@
 
 Every fitted step (imputation medians, condition statistics, the model) is fitted
 on the training engines of a fold and only applied to its validation engines.
-The final model is refitted on all training engines and scored on the test set.
+The final model is refitted on all training engines, scored on the test set,
+and saved with its fitted pipeline to ``models/`` (see src/models/artifacts.py).
 
 Training and validation targets are capped at ``rul_cap``. Test scores are
 reported against NASA's true RUL (uncapped, the primary target) and against the
@@ -24,6 +25,7 @@ from src.data.splits import iter_folds
 from src.evaluation.metrics import nasa_score, rmse
 from src.features.labels import add_test_rul, add_train_rul
 from src.features.pipeline import FeaturePipeline, kept_sensors
+from src.models.artifacts import TrainedModel, save
 from src.features.windows import DEFAULT_SUMMARIES
 
 MODELS = {"random_forest": RandomForestRegressor, "xgboost": XGBRegressor}
@@ -36,21 +38,38 @@ def build_model(name: str, params: dict, seed: int):
     return MODELS[name](**params, random_state=seed)
 
 
-def fit_predict(name, params, seed, train, other, sensors, window, *, summaries=DEFAULT_SUMMARIES, last_only=False):
-    """Fit the pipeline and model on ``train``; return predictions and index for ``other``."""
+def fit(name, params, seed, train, sensors, window, *, summaries=DEFAULT_SUMMARIES):
+    """Fit the pipeline and model on ``train``; return (pipeline, model)."""
     pipeline = FeaturePipeline(sensors, window, summaries).fit(train)
     X_train, train_index = pipeline.transform(train)
     model = build_model(name, params, seed).fit(X_train, train_index["rul"])
-    X_other, other_index = pipeline.transform(other, last_only=last_only)
-    return np.clip(model.predict(X_other), 0, None), other_index
+    return pipeline, model
+
+
+def predict(pipeline, model, df, *, last_only=False):
+    """Return (predictions clipped at 0, index) for ``df``."""
+    X, index = pipeline.transform(df, last_only=last_only)
+    return np.clip(model.predict(X), 0, None), index
+
+
+def fit_predict(name, params, seed, train, other, sensors, window, *, summaries=DEFAULT_SUMMARIES, last_only=False):
+    """Fit the pipeline and model on ``train``; return predictions and index for ``other``."""
+    pipeline, model = fit(name, params, seed, train, sensors, window, summaries=summaries)
+    return predict(pipeline, model, other, last_only=last_only)
 
 
 def scores(y_true, y_pred) -> dict:
     return {"rmse": rmse(y_true, y_pred), "nasa_score": nasa_score(y_true, y_pred)}
 
 
-def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
-    """Cross-validate and test every baseline on one subset."""
+def run_subset(
+    subset: str, config: dict, *, models_dir: Path | None = None, tag: str = ""
+) -> tuple[dict, pd.DataFrame]:
+    """Cross-validate and test every baseline on one subset.
+
+    With ``models_dir``, each final model is saved there as
+    ``<model>_<subset><tag>.joblib``.
+    """
     prep, seed = config["preprocessing"], config["seed"]
     cap, window, summaries = prep["rul_cap"], prep["window_size"], list(prep["rolling_stats"])
     sensors = kept_sensors(prep["drop_sensors"][subset])
@@ -67,9 +86,8 @@ def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
             pred, index = fit_predict(name, params, seed, fold_train, fold_val, sensors, window, summaries=summaries)
             folds.append(scores(index["rul"], pred))
 
-        pred, index = fit_predict(
-            name, params, seed, train, test, sensors, window, summaries=summaries, last_only=True
-        )
+        pipeline, model = fit(name, params, seed, train, sensors, window, summaries=summaries)
+        pred, index = predict(pipeline, model, test, last_only=True)
         true = index["rul"].to_numpy()
         results["models"][name] = {
             "params": params,
@@ -79,6 +97,10 @@ def run_subset(subset: str, config: dict) -> tuple[dict, pd.DataFrame]:
             "test_uncapped": scores(true, pred),
             "test_capped": scores(np.minimum(true, cap), pred),
         }
+        if models_dir is not None:
+            info = {"subset": subset, "sensors": sensors, "window_size": window, "rolling_stats": summaries,
+                    "params": params, "test_uncapped": results["models"][name]["test_uncapped"]}
+            save(TrainedModel(name, pipeline, model, cap, info), Path(models_dir) / f"{name}_{subset}{tag}.joblib")
         predictions.append(pd.DataFrame({"model": name, "unit": index["unit"], "true_rul": true, "predicted_rul": pred}))
     return results, pd.concat(predictions, ignore_index=True)
 
@@ -116,8 +138,9 @@ def main(argv: list[str] | None = None) -> None:
         suffix = "_" + "_".join(args.rolling_stats)
     out_dir = resolve_path(config["results_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = resolve_path(config["models_dir"])
     for subset in args.subset or config["data"]["subsets"]:
-        results, predictions = run_subset(subset, config)
+        results, predictions = run_subset(subset, config, models_dir=models_dir, tag=suffix)
         Path(out_dir / f"baselines_{subset}{suffix}.json").write_text(json.dumps(results, indent=2))
         predictions.to_csv(out_dir / f"baselines_{subset}{suffix}_test_predictions.csv", index=False)
         print(f"\n{subset} (test scores against uncapped RUL unless marked capped)")
